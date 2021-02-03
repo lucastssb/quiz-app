@@ -12,39 +12,45 @@ import (
 
 func main() {
 	csvFileName := flag.String("csv", "problems.csv", "a csv file in the format of 'question,answer'")
+	timeLimit := flag.Int("limit", 3, "the time limit for the quiz in seconds")
 	flag.Parse()
 
 	problems := parseRecords(readCsv(csvFileName))
 
-	showQuestionAndScore(problems)
+	showQuestionAndScore(problems, timeLimit)
 
 }
 
-func showQuestionAndScore(problems []problem) {
+func showQuestionAndScore(problems []problem, timeLimit *int) {
+	timer := time.NewTimer(time.Duration(*timeLimit) * time.Second)
 	score := 0
+
+questionsLoop:
 	for i, p := range problems {
-		var answer string
 		fmt.Printf("Problem #%d: %s \n", i, p.question)
 		fmt.Println("A. ", p.firstAlternative)
 		fmt.Println("B. ", p.secondAlternative)
 		fmt.Println("C. ", p.thirdAlternative)
 		fmt.Println("D. ", p.fourthAlternative)
-		fmt.Scanf("%s\n", &answer)
+		answerChan := make(chan string)
+		go func() {
+			var answer string
+			fmt.Scanf("%s\n", &answer)
+			answerChan <- answer
+		}()
 
-		if strings.ToUpper(answer) == p.answer {
-			score++
+		select {
+		case <-timer.C:
+			fmt.Println()
+			break questionsLoop
+		case answer := <-answerChan:
+			if strings.ToUpper(answer) == p.answer {
+				score++
+			}
 		}
 	}
 
-	fmt.Printf("You scored %d out of %d.\n ", score, len(problems))
-}
-
-func timeCounter(done chan int, t int) {
-	for i := 1; i <= t; i++ {
-		time.Sleep(1 * time.Second)
-		fmt.Println(i)
-	}
-	done <- 1
+	fmt.Printf("You scored %d out of %d. ", score, len(problems))
 }
 
 type problem struct {
@@ -73,7 +79,6 @@ func parseRecords(records [][]string) []problem {
 }
 
 func readCsv(filePath *string) [][]string {
-	//Gets file from its path
 	file, err := os.Open(*filePath)
 	if err != nil {
 		log.Fatal(err)
@@ -81,7 +86,6 @@ func readCsv(filePath *string) [][]string {
 	}
 	defer file.Close()
 
-	//Parse file
 	r := csv.NewReader(file)
 	records, err := r.ReadAll()
 	if err != nil {
